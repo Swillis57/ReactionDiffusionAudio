@@ -85,7 +85,17 @@ class ReactionDiffusion {
 			"void main() {" +
 			"   vec2 uv = gl_FragCoord.xy/dim;" +
 			"   vec2 pixel = texture2D(frame, uv).rb;" +
-			"   gl_FragColor = vec4(pixel.r, 0.0, pixel.g, 1.0);" +
+			"   gl_FragColor = vec4(vec3(pixel.r - pixel.g), 1.0);" +
+			"}";
+
+		let downsampleFragShaderSource = "" +
+			"precision highp float;" +
+			"precision highp int;" +
+			"uniform vec2 dim;" +
+			"uniform sampler2D frame;" +
+			"void main() {" +
+			"   vec2 uv = gl_FragCoord.xy/dim;" +
+			"   vec2 pixel = texture2D(frame, uv).rb;" +
 			"}";
 
 		this.rtsProgram = this.CreateShaderProgram(vertShaderSource, rtsFragShaderSource);
@@ -108,17 +118,17 @@ class ReactionDiffusion {
 		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.frameBuffer.depth);
 
 		this.buffers = [];
-		for(let i = 0; i < 2; i++) {
+		for(let i = 0; i < 3; i++) {
 			let buf = gl.createTexture();
 			gl.activeTexture(gl.TEXTURE0 + i);
 			gl.bindTexture(gl.TEXTURE_2D, buf);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+			gl.generateMipmap(gl.TEXTURE_2D);
 			this.buffers.push(buf);
 		}
-
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffers[0], 0);
+		this.copyBuffer = this.buffers[2];
 		this.prevBuffer = 1;
 
 		let dataArray = [];
@@ -144,6 +154,11 @@ class ReactionDiffusion {
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
 
 		gl.viewport(0, 0, cvs.width, cvs.height);
+
+		//audio resources
+		this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+		this.analyser = this.audioCtx.createAnalyser();
+		this.analyser.connect(this.audioCtx.destination);
 	}
 	
 	CreateShaderProgram(vertSource, fragSource) {
@@ -235,8 +250,21 @@ class ReactionDiffusion {
 		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-		this.prevBuffer = currentBuffer;
+		let maxMipLevel = Math.floor(Math.log2(this.width));
+		gl.activeTexture(gl.TEXTURE0 + currentBuffer);
+		gl.generateMipmap(gl.TEXTURE_2D);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffers[currentBuffer], 0);
+		gl.activeTexture(gl.TEXTURE0 + 2);
+		gl.copyTexImage2D(gl.TEXTURE_2D, maxMipLevel, gl.RGBA, 0, 0, 1, 1, 0);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.copyBuffer, 0);
 
+		let pix = new Uint8Array(4);
+		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pix);
+		console.log(pix);
+
+
+		this.prevBuffer = currentBuffer;
 		window.requestAnimationFrame(this.Run.bind(this));
 	}
 }
