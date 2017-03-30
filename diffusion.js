@@ -160,6 +160,10 @@ class ReactionDiffusion {
 		this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 		this.analyser = this.audioCtx.createAnalyser();
 		this.analyser.connect(this.audioCtx.destination);
+
+		this.pixels = new Uint8Array(this.width*this.height*4);
+		this.audioBuffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate/60, this.audioCtx.sampleRate);
+		this.radarAngle = Math.PI/2;
 	}
 	
 	CreateShaderProgram(vertSource, fragSource) {
@@ -261,12 +265,32 @@ class ReactionDiffusion {
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.copyBuffer, 0);
 		gl.activeTexture(gl.TEXTURE0 + 3);
 		gl.copyTexImage2D(gl.TEXTURE_2D, maxMipLevel, gl.RGBA, 0, 0, 1, 1, 0);
-
-		let pix = new Uint8Array(4);
-		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pix);
-		console.log(pix);
 		*/
 
+		gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+		let r = Math.sqrt(Math.pow(this.width, 2) + Math.pow(this.height, 2));
+		let dr = r / 735;
+		let centerX = this.width/2;
+		let centerY = this.height/2;
+		let buf = this.audioBuffer.getChannelData(0);
+		for (let i = 0; i < 735; i++)
+		{
+			let x = (i*dr)*Math.cos(this.radarAngle) + centerX;
+			let y = (i*dr)*Math.sin(this.radarAngle) + centerY;
+			x = Math.floor(x);
+			y = Math.floor(y);
+			x = (x + this.width) % this.width;
+			y = (y + this.height) % this.height;
+			let idx = (x + y * this.width) * 4;
+			buf[i] = (this.pixels[idx]/255.0) * 440;
+		}
+
+		let srcNode = this.audioCtx.createBufferSource();
+		srcNode.source = this.audioBuffer;
+		srcNode.connect(this.audioCtx.destination);
+		srcNode.start();
+
+		this.radarAngle -= 0.32 * Math.PI;
 		this.prevBuffer = currentBuffer;
 		window.requestAnimationFrame(this.Run.bind(this));
 	}
