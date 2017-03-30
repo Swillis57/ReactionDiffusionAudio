@@ -3,7 +3,7 @@
 class ReactionDiffusion {
 	constructor(cvs) {
 		this.canvas = cvs;
-		this.gl = cvs.getContext("webgl") || cvs.getContext("webgl-experimental");
+		this.gl = cvs.getContext("webgl2") || cvs.getContext("webgl-experimental");
 		if (!this.gl) {
 			alert("This browser does not support WebGL");
 			return;
@@ -85,7 +85,7 @@ class ReactionDiffusion {
 			"void main() {" +
 			"   vec2 uv = gl_FragCoord.xy/dim;" +
 			"   vec2 pixel = texture2D(frame, uv).rb;" +
-			"   gl_FragColor = vec4(vec3(pixel.r - pixel.g), 1.0);" +
+			"   gl_FragColor = vec4(vec3(pixel.g), 1.0);" +
 			"}";
 
 		let downsampleFragShaderSource = "" +
@@ -118,7 +118,7 @@ class ReactionDiffusion {
 		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.frameBuffer.depth);
 
 		this.buffers = [];
-		for(let i = 0; i < 3; i++) {
+		for(let i = 0; i < 4; i++) {
 			let buf = gl.createTexture();
 			gl.activeTexture(gl.TEXTURE0 + i);
 			gl.bindTexture(gl.TEXTURE_2D, buf);
@@ -129,6 +129,7 @@ class ReactionDiffusion {
 			this.buffers.push(buf);
 		}
 		this.copyBuffer = this.buffers[2];
+		this.downscaleBuffer = this.buffers[3];
 		this.prevBuffer = 1;
 
 		let dataArray = [];
@@ -142,7 +143,7 @@ class ReactionDiffusion {
 				let diffX = x - centerX;
 				let diffY = y - centerY;
 				let dist = diffX*diffX + diffY*diffY;
-				if (dist < 2500)
+				if (dist < 100)
 					b = 255;
 
 				dataArray.push(255, 0, b, 255);
@@ -208,7 +209,7 @@ class ReactionDiffusion {
 
 	Run(time) {
 		let da = 0.4,
-			db = 0.2,
+			db = 0.15,
 			f = 0.029,
 			k = 0.057;
 
@@ -250,19 +251,21 @@ class ReactionDiffusion {
 		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 
+		/*
 		let maxMipLevel = Math.floor(Math.log2(this.width));
-		gl.activeTexture(gl.TEXTURE0 + currentBuffer);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.activeTexture(gl.TEXTURE0 + 2);
+		gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, this.width, this.height, 0);
 		gl.generateMipmap(gl.TEXTURE_2D);
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffers[currentBuffer], 0);
-		gl.activeTexture(gl.TEXTURE0 + 2);
-		gl.copyTexImage2D(gl.TEXTURE_2D, maxMipLevel, gl.RGBA, 0, 0, 1, 1, 0);
 		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.copyBuffer, 0);
+		gl.activeTexture(gl.TEXTURE0 + 3);
+		gl.copyTexImage2D(gl.TEXTURE_2D, maxMipLevel, gl.RGBA, 0, 0, 1, 1, 0);
 
 		let pix = new Uint8Array(4);
 		gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pix);
 		console.log(pix);
-
+		*/
 
 		this.prevBuffer = currentBuffer;
 		window.requestAnimationFrame(this.Run.bind(this));
