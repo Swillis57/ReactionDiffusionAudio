@@ -213,7 +213,7 @@ class ReactionDiffusion {
 
 	Run(time) {
 		let da = 0.4,
-			db = 0.15,
+			db = 0.20,
 			f = 0.029,
 			k = 0.057;
 
@@ -282,15 +282,15 @@ class ReactionDiffusion {
 			x = (x + this.width) % this.width;
 			y = (y + this.height) % this.height;
 			let idx = (x + y * this.width) * 4;
-			buf[i] = (this.pixels[idx]/255.0) * 440;
+			buf[i] = (this.pixels[idx]/255.0);
 		}
 
 		let srcNode = this.audioCtx.createBufferSource();
-		srcNode.source = this.audioBuffer;
+		srcNode.buffer = this.audioBuffer;
 		srcNode.connect(this.audioCtx.destination);
 		srcNode.start();
 
-		this.radarAngle -= 0.32 * Math.PI;
+		this.radarAngle -= 0.016 * Math.PI;
 		this.prevBuffer = currentBuffer;
 		window.requestAnimationFrame(this.Run.bind(this));
 	}
