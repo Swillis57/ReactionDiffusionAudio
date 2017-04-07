@@ -11,11 +11,14 @@ class ReactionDiffusion {
 
 		this.width = cvs.width;
 		this.height = cvs.height;
-		
+		this.numOscillators = 88;
+		this.oscillators = [];
+		this.oscillators.fill(0, 0, 60);
+		this.a = Math.pow(2, 1/12.0);
 		//convenience
 		let gl = this.gl;
 
-		this.gl.clearColor(0.39, 0.58, 0.93, 1.0);
+		this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
 		this.gl.frontFace(gl.CW);
 
 		const quad = [
@@ -34,11 +37,15 @@ class ReactionDiffusion {
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.vBuf);
 		gl.bufferData(gl.ARRAY_BUFFER, quadBuf, gl.STATIC_DRAW);
 
+		const line = new Float32Array([0, 0, 0, 1]);
+		this.lineBuf = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuf);
+		gl.bufferData(gl.ARRAY_BUFFER, line, gl.STATIC_DRAW);
+
 		let vertShaderSource = "" +
 			"precision highp float;" +
 			"precision highp int;" +
 			"attribute vec2 vPos;" +
-			"" +
 			"void main() {" +
 			"   gl_Position = vec4(vPos, 0.0, 1.0);" +
 			"}";
@@ -69,7 +76,7 @@ class ReactionDiffusion {
 			"   vec2 bc = 0.2 * texture2D(prevFrame, uv+vec2(0, -d.y)).rb;" +
 			"   vec2 br = 0.05 * texture2D(prevFrame, uv+vec2(d.x,- d.y)).rb;" +
 			"" +
-			"   vec2 sum = tl + tc + tr + cl + cc + cr + bl + bc + br;" +
+			"   vec2 sum = (tl + tc + tr + cl + cc + cr + bl + bc + br);" +
 			"   vec2 thisCell = texture2D(prevFrame, uv).rb;" +
 			"   float powG = thisCell.g*thisCell.g;" +
 			"   float nextA = thisCell.r + (da*sum.r - thisCell.r*powG + f*(1.0-thisCell.r))*dt;" +
@@ -88,14 +95,21 @@ class ReactionDiffusion {
 			"   gl_FragColor = vec4(vec3(pixel.g), 1.0);" +
 			"}";
 
-		let downsampleFragShaderSource = "" +
+		let lineVertShaderSource = "" +
 			"precision highp float;" +
 			"precision highp int;" +
-			"uniform vec2 dim;" +
-			"uniform sampler2D frame;" +
+			"attribute vec2 vPos;" +
+			"uniform mat2 transform;" +
 			"void main() {" +
-			"   vec2 uv = gl_FragCoord.xy/dim;" +
-			"   vec2 pixel = texture2D(frame, uv).rb;" +
+			"   gl_Position = vec4(transform*vPos, 0.0, 1.0);" +
+			"}";
+
+		let lineFragShaderSource = "" +
+			"precision highp float;" +
+			"precision highp int;" +
+			"" +
+			"void main() {" +
+			"   gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);" +
 			"}";
 
 		this.rtsProgram = this.CreateShaderProgram(vertShaderSource, rtsFragShaderSource);
@@ -104,10 +118,14 @@ class ReactionDiffusion {
 		this.diffusionProgram = this.CreateShaderProgram(vertShaderSource, diffusionShaderSource);
 		this.EnumerateUniforms(this.diffusionProgram, ["da", "db", "f", "k", "dt", "dim", "prevFrame"]);
 
+		this.lineProgram = this.CreateShaderProgram(lineVertShaderSource, lineFragShaderSource);
+		this.EnumerateUniforms(this.lineProgram, ["transform"]);
+
 		//Hook up vertex attribute (only need one since we're just drawing a quad)
 		this.attribLoc = 0;
 		gl.bindAttribLocation(this.rtsProgram, this.attribLoc, "vPos");
 		gl.bindAttribLocation(this.diffusionProgram, this.attribLoc, "vPos");
+		gl.bindAttribLocation(this.lineProgram, this.attribLoc, "vPos");
 
 		//Create a local framebuffer to swap out color buffers
 		this.frameBuffer = gl.createFramebuffer();
@@ -118,7 +136,7 @@ class ReactionDiffusion {
 		gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.frameBuffer.depth);
 
 		this.buffers = [];
-		for(let i = 0; i < 4; i++) {
+		for(let i = 0; i < 2; i++) {
 			let buf = gl.createTexture();
 			gl.activeTexture(gl.TEXTURE0 + i);
 			gl.bindTexture(gl.TEXTURE_2D, buf);
@@ -128,8 +146,6 @@ class ReactionDiffusion {
 			gl.generateMipmap(gl.TEXTURE_2D);
 			this.buffers.push(buf);
 		}
-		this.copyBuffer = this.buffers[2];
-		this.downscaleBuffer = this.buffers[3];
 		this.prevBuffer = 1;
 
 		let dataArray = [];
@@ -160,6 +176,17 @@ class ReactionDiffusion {
 		this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 		this.analyser = this.audioCtx.createAnalyser();
 		this.analyser.connect(this.audioCtx.destination);
+
+		for (let i = 0; i < this.numOscillators; i++) {
+			let o = this.audioCtx.createOscillator();
+			o.frequency.value = 27.5 * Math.pow(this.a, i);
+			let g = this.audioCtx.createGain();
+			g.gain.value = 0.0;
+			o.connect(g);
+			o.start();
+			g.connect(this.audioCtx.destination);
+			this.oscillators[i] = g;
+		}
 
 		this.pixels = new Uint8Array(this.width*this.height*4);
 		this.audioBuffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate/60, this.audioCtx.sampleRate);
@@ -232,11 +259,11 @@ class ReactionDiffusion {
 		gl.useProgram(this.diffusionProgram);
 		gl.vertexAttribPointer(this.attribLoc, 2, gl.FLOAT, gl.FALSE, 0, 0);
 		gl.enableVertexAttribArray(this.attribLoc);
-		gl.uniform1f(this.diffusionProgram.da, da);
-		gl.uniform1f(this.diffusionProgram.db, db);
-		gl.uniform1f(this.diffusionProgram.f, f);
-		gl.uniform1f(this.diffusionProgram.k, k);
-		gl.uniform1f(this.diffusionProgram.dt, dt);
+		gl.uniform1f(this.diffusionProgram.da, this.da);
+		gl.uniform1f(this.diffusionProgram.db, this.db);
+		gl.uniform1f(this.diffusionProgram.f, this.f);
+		gl.uniform1f(this.diffusionProgram.k, this.k);
+		gl.uniform1f(this.diffusionProgram.dt, this.dt);
 		gl.uniform2f(this.diffusionProgram.dim, this.width, this.height);
 		gl.uniform1i(this.diffusionProgram.prevFrame, this.prevBuffer);
 		gl.activeTexture(gl.TEXTURE0 + this.prevBuffer);
@@ -245,6 +272,7 @@ class ReactionDiffusion {
 
 		//Render to screen
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.vBuf);
 		gl.useProgram(this.rtsProgram);
 		gl.vertexAttribPointer(this.attribLoc, 2, gl.FLOAT, gl.FALSE, 0, 0);
@@ -267,30 +295,48 @@ class ReactionDiffusion {
 		gl.copyTexImage2D(gl.TEXTURE_2D, maxMipLevel, gl.RGBA, 0, 0, 1, 1, 0);
 		*/
 
-		gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
-		let r = Math.sqrt(Math.pow(this.width, 2) + Math.pow(this.height, 2));
-		let dr = r / 735;
+		let r = Math.min(Math.abs(1/Math.cos(this.radarAngle)), Math.abs(1/Math.sin(this.radarAngle)));
 		let centerX = this.width/2;
 		let centerY = this.height/2;
-		let buf = this.audioBuffer.getChannelData(0);
-		for (let i = 0; i < 735; i++)
+		let cornerRadius = Math.sqrt(2) * centerX;
+		let c = r*Math.cos(this.radarAngle);
+		let s = r*Math.sin(this.radarAngle);
+		let mat = new Float32Array([c, -s, s, c]);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuf);
+		gl.useProgram(this.lineProgram);
+		gl.vertexAttribPointer(this.attribLoc, 2, gl.FLOAT, gl.FALSE, 0, 0);
+		gl.enableVertexAttribArray(this.attribLoc);
+		gl.uniformMatrix2fv(this.lineProgram.transform, false, mat);
+		gl.drawArrays(gl.LINES, 0, 2);
+
+		let oscillators = [];
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffers[currentBuffer], 0);
+		gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+		let dr = r / this.numOscillators;
+		for (let o = 0; o < this.numOscillators; o++)
 		{
-			let x = (i*dr)*Math.cos(this.radarAngle) + centerX;
-			let y = (i*dr)*Math.sin(this.radarAngle) + centerY;
-			x = Math.floor(x);
-			y = Math.floor(y);
-			x = (x + this.width) % this.width;
-			y = (y + this.height) % this.height;
-			let idx = (x + y * this.width) * 4;
-			buf[i] = (this.pixels[idx]/255.0);
+			this.oscillators[o].gain.value = 0.0;
+			let ratio = o / (this.numOscillators-1.0);
+			let x = Math.floor(ratio*s*centerX) + centerX;
+			let y = Math.floor(ratio*c*centerY) + centerY;
+			if (x < 0 || x >= this.width || y < 0 || y >= this.height)
+				continue;
+
+			let idx = (x + y * this.width)*4;
+			let pixel = [this.pixels[idx], this.pixels[idx+1], this.pixels[idx+2], this.pixels[idx+3]];
+			if (pixel[2] > 0) {
+				this.oscillators[o].gain.value = 0.05;
+			}
 		}
 
-		let srcNode = this.audioCtx.createBufferSource();
+		/*let srcNode = this.audioCtx.createBufferSource();
 		srcNode.buffer = this.audioBuffer;
 		srcNode.connect(this.audioCtx.destination);
-		srcNode.start();
+		srcNode.start();*/
 
-		this.radarAngle -= 0.016 * Math.PI;
+		this.radarAngle += 0.016 * Math.PI;
 		this.prevBuffer = currentBuffer;
 		window.requestAnimationFrame(this.Run.bind(this));
 	}
