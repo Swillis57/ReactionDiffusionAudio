@@ -381,7 +381,7 @@ class ReactionDiffusion {
 		srcNode.connect(this.audioCtx.destination);
 		srcNode.start();*/
 
-		this.radarAngle += 0.016 * Math.PI;
+		this.radarAngle += 0.0016 * Math.PI;
 		this.prevBuffer = currentBuffer;
 		window.requestAnimationFrame(this.Run.bind(this));
 	}
