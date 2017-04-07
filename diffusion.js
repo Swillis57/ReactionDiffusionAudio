@@ -15,6 +15,12 @@ class ReactionDiffusion {
 		this.oscillators = [];
 		this.oscillators.fill(0, 0, 60);
 		this.a = Math.pow(2, 1/12.0);
+		this.da = 0.4;
+		this.db = 0.2;
+		this.f = 0.037;
+		this.k = 0.06;
+		this.dt = 2.5;
+
 		//convenience
 		let gl = this.gl;
 
@@ -153,23 +159,21 @@ class ReactionDiffusion {
 		let centerY = this.height/2;
 		for (let y = 0; y < this.height; y++) {
 			for (let x = 0; x < this.width; x++) {
-				//let f = (Math.random() > 0.99)*255;
-
-				let b = 0;
+				let a = 255, b = 0;
 				let diffX = x - centerX;
 				let diffY = y - centerY;
 				let dist = diffX*diffX + diffY*diffY;
-				if (dist < 100)
+				if (dist > 90 && dist < 125) {
 					b = 255;
-
-				dataArray.push(255, 0, b, 255);
+					a = 0
+				}
+				dataArray.push(a, 0, b, 255);
 			}
 		}
 		let data = new Uint8Array(dataArray);
 
 		gl.activeTexture(gl.TEXTURE0 + this.prevBuffer);
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-
 		gl.viewport(0, 0, cvs.width, cvs.height);
 
 		//audio resources
@@ -191,6 +195,48 @@ class ReactionDiffusion {
 		this.pixels = new Uint8Array(this.width*this.height*4);
 		this.audioBuffer = this.audioCtx.createBuffer(1, this.audioCtx.sampleRate/60, this.audioCtx.sampleRate);
 		this.radarAngle = Math.PI/2;
+	}
+
+	UpdateParameters(da, db, f, k, dt) {
+		if (da != null) this.da = da;
+		if (db != null) this.db = db;
+		if (f != null) this.f = f;
+		if (k != null) this.k = k;
+		if (dt != null) this.dt = dt;
+	}
+
+	ResetBuffers() {
+		let gl = this.gl;
+
+		for (let i = 0; i < 2; i++) {
+			gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
+			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.buffers[i], 0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+		}
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		this.prevBuffer = 1;
+
+		let dataArray = [];
+		let centerX = this.width/2;
+		let centerY = this.height/2;
+		for (let y = 0; y < this.height; y++) {
+			for (let x = 0; x < this.width; x++) {
+				let a = 255, b = 0;
+				let diffX = x - centerX;
+				let diffY = y - centerY;
+				let dist = diffX*diffX + diffY*diffY;
+				if (dist > 90 && dist < 125) {
+					b = 255;
+					a = 0
+				}
+				dataArray.push(a, 0, b, 255);
+			}
+		}
+		let data = new Uint8Array(dataArray);
+
+		gl.activeTexture(gl.TEXTURE0 + this.prevBuffer);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
 	}
 	
 	CreateShaderProgram(vertSource, fragSource) {
@@ -238,17 +284,16 @@ class ReactionDiffusion {
 		});
 	}
 
+	//Interesting settings:
+	//Concentric rings: da = 0.2097, db = 0.105, f = 0.04, k = 0.06, dt = 2.0
+	//Metroid ball: da = 0.21, db = 0.11, f = 0.037, k = 0.06, dt = 2.0
+	//Tunnel builder: da = 0.4, db = 0.2, f = 0.025, k = 0.05, dt = 2.5
 	Run(time) {
-		let da = 0.4,
-			db = 0.20,
-			f = 0.029,
-			k = 0.057;
+
 
 		let gl = this.gl;
 		if (!this.start) this.start = time;
-		let dt = 1.5;
 		this.start = time;
-		console.log(dt);
 
 		let currentBuffer = (this.prevBuffer + 1) % 2;
 

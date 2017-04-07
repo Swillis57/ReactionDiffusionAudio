@@ -4,20 +4,51 @@
     <script type="text/javascript" src="./bundle.js"></script>
     <style type="text/css">
         body {
-            background-color: rgba(51, 51, 51, 255);
+            background-color: rgba(22, 22, 22, 255);
             width: 100%;
         }
 
         canvas {
+            box-shadow: 0 0 1em 0.5em #090909;
+            clear: both;
+        }
+
+        #main {
             position: absolute;
             top: 50%;
             transform: translateY(-50%) translateX(-50%);
-            box-shadow: 0 0 1em 0.5em #111111;
             left: 50%;
+        }
+
+        #main #inputs {
+            margin-top: 1em;
+            display: block;
+            text-align: justify;
+        }
+
+        input {
+            background-color: rgba(51, 51, 51, 255);
+            color: rgba(200, 200, 200, 255);
+            border-color: #212121;
+            padding: 0.25em;
+            border-radius : 0.3em;
         }
     </style>
 </head>
 <body>
-<canvas></canvas>
+<div id="main">
+    <canvas></canvas>
+    <div id="inputs">
+        <input id="da" type="text" placeholder="Chemical A Diffusion Rate"/>
+        <input id="db" type="text" placeholder="Chemical B Diffusion Rate"/>
+        <input id="f" type="text" placeholder="Feed Rate"/>
+        <input id="k" type="text" placeholder="Kill Rate"/>
+        <input id="dt" type="text" placeholder="Delta-time"/>
+        <div style="display:inline-block; width: 100%;"></div>
+    </div>
+    <div style="width:100%; text-align: center;">
+        <input id="enterButton" type="button" value="Enter Values"/>
+    </div>
+</div>
 </body>
 </html>
