@@ -1,3 +1,5 @@
+let tonal = require("tonal");
+
 "use strict";
 
 class ReactionDiffusion {
@@ -180,10 +182,15 @@ class ReactionDiffusion {
 		this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 		this.analyser = this.audioCtx.createAnalyser();
 		this.analyser.connect(this.audioCtx.destination);
+		let chord = tonal.chord.names();
+		chord = chord[Math.floor(Math.random() * chord.length)];
+		let key = ['A', 'B', 'C', 'D', 'E', 'F', 'G'][Math.floor(Math.random() * 7)] + ["", "b", "#"][Math.floor(Math.random()*2)];
+		let notes = tonal.chord.notes(key + " " + chord);
 
 		for (let i = 0; i < this.numOscillators; i++) {
 			let o = this.audioCtx.createOscillator();
-			o.frequency.value = 27.5 * Math.pow(this.a, i);
+			o.frequency.value = tonal.note.freq(notes[i % notes.length] + (Math.floor(i / (this.numOscillators/notes.length)) + 1).toString());
+			console.log(notes[i % notes.length] + (Math.floor(i / (this.numOscillators/notes.length)) + 1).toString() + ", " + o.frequency.value);
 			let g = this.audioCtx.createGain();
 			g.gain.value = 0.0;
 			o.connect(g);
@@ -372,7 +379,7 @@ class ReactionDiffusion {
 			let idx = (x + y * this.width)*4;
 			let pixel = [this.pixels[idx], this.pixels[idx+1], this.pixels[idx+2], this.pixels[idx+3]];
 			if (pixel[2] > 0) {
-				this.oscillators[o].gain.value = 0.05;
+				this.oscillators[o].gain.value = 0.05 * (pixel[2]/255);
 			}
 		}
 
